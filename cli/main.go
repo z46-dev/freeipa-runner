@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/z46-dev/freeipa-runner/config"
+	"github.com/z46-dev/freeipa-runner/service/runner"
 )
 
 type RunNowOptions struct {
@@ -83,9 +85,60 @@ func runNow(opts RunNowOptions) {
 	fmt.Printf("  Hostnames: %s\n", strings.Join(opts.Hostnames, ", "))
 	fmt.Printf("  Type:      %s\n", opts.TaskType)
 	fmt.Printf("  File:      %s\n", opts.File)
+
+	var (
+		hosts []string
+		err   error
+	)
+
+	for _, group := range opts.Groups {
+		var groupHosts []string
+		if groupHosts, err = runner.GetGroupHosts(group); err != nil {
+			fmt.Printf("Error fetching hosts for group %s: %v\n", group, err)
+			return
+		}
+
+		hosts = append(hosts, groupHosts...)
+	}
+
+	hosts = append(hosts, opts.Hostnames...)
+
+	fmt.Printf("  Target hosts: (%d) %s\n", len(hosts), strings.Join(hosts, ", "))
+
+	switch strings.ToLower(opts.TaskType) {
+	case "bash":
+		res, err := runner.RunBashScript(opts.File, hosts)
+		printResults(res, err)
+	case "python":
+		res, err := runner.RunPythonScript(opts.File, hosts)
+		printResults(res, err)
+	case "ansible":
+		res, err := runner.RunAnsiblePlaybook(opts.File, hosts)
+		printResults(res, err)
+	default:
+		fmt.Printf("Unknown task type %q (use bash|python|ansible)\n", opts.TaskType)
+	}
+}
+
+func printResults(res []runner.BashResponse, err error) {
+	if err != nil {
+		fmt.Println("fatal:", err)
+		return
+	}
+	for _, r := range res {
+		status := "OK"
+		if r.Error != nil {
+			status = "ERR: " + r.Error.Error()
+		}
+		fmt.Printf("\n[%s] %s\n%s\n", r.Host, status, r.Response)
+	}
 }
 
 func main() {
+	if err := config.InitEnv(".env"); err != nil {
+		panic(err)
+	}
+
 	if err := rootCommand.Execute(); err != nil {
 		panic(err)
 	}

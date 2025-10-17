@@ -13,6 +13,8 @@ func init() {
 func main() {
 	log.Basic("Starting FreeIPA Daemon...")
 
+	
+
 	defer func() {
 		log.Basic("Shutting down FreeIPA Daemon...")
 	}()
